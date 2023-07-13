@@ -1,7 +1,6 @@
 ---
 - name: install apache
   hosts: webserver
-  remote_user: ansible
   become: true
   vars:
    index_src: files/index.html 
