@@ -1,9 +1,7 @@
 ---
-- name: install apache
+- name: install httpd
   hosts: webserver
   become: true
-  vars:
-   index_src: files/index.html
   tasks:
     - name: httpd installed
       yum:
@@ -11,7 +9,7 @@
         state: latest
     - name: custom index.html
       template:
-        src: "{{ index_src }}"
+        src: files/index.html
         dest: /var/www/html/index.html
       notify:
        - restart httpd
@@ -20,25 +18,6 @@
         name: httpd
         enabled: true
         state: started
-#    - name: Import firewall task
-#      import_tasks: tasks/firewall.yml
-#        rule:
-#        - http
-#        - https
-#    - name: firewalld service enabled
-#      service:
-#        name: firewalld
-#        enabled: true
-#        state: started
-#    - name: open ports 80 and 443
-#      firewalld:
-#        service: http
-#        state: enabled
-#        immediate: true
-#        permanent: true
-#      rule:
-#       - http
-#       - https
 
   handlers:
     - name: restart httpd

@@ -1,0 +1,67 @@
+---
+- name: Config DHCP Server
+  hosts: dhcp
+  become: yes
+  vars:
+    dhcp_interface: enp0s3
+    dhcp_subnet: 10.0.0.0
+    dhcp_netmask: 255.255.255.0
+    dhcp_range_start: 10.0.0.100
+    dhcp_range_end: 10.0.0.200
+    dhcp_dns_servers:
+      - 8.8.8.8 
+      - 8.8.4.4
+    dhcp_hosts_file: dados-dhcp.csv
+
+  tasks:
+    - name: Install DHCP
+      yum:
+        name:
+          - dhcp
+        state: present
+
+    - name: Read csv file
+      csvfile:
+        path: "{{ dhcp_hosts_file }}"
+        delimiter: ","
+        firstline: yes
+      register: hosts_csv
+
+    - name: Configurar arquivo dhcpd.conf
+      blockinfile:
+        dest: /etc/dhcp/dhcpd.conf
+        block: |
+          subnet {{ dhcp_subnet }} netmask {{ dhcp_netmask }} {
+            range {{ dhcp_range_start }} {{ dhcp_range_end }};
+            option domain-name-servers {{ dhcp_dns_servers | join(', ') }};
+            option routers {{ ansible_default_ipv4.gateway }};
+
+            {% for host in hosts_csv.lines %}
+            host {{ host.0 }} {
+              hardware ethernet {{ host.2 }};
+              fixed-address {{ host.1 }};
+            }
+            {% endfor %}
+          }
+      notify:
+        - restart dhcp
+
+    - name: Config interface DHCP
+      lineinfile:
+        dest: /etc/sysconfig/network-scripts/ifcfg-{{ dhcp_interface }}
+        line: "BOOTPROTO=dhcp"
+        state: present
+        create: yes
+
+    - name: start DHCP
+      service:
+        name: dhcpd
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart dhcp
+      service:
+        name: dhcpd
+        state: restarted
+
