@@ -1,0 +1,26 @@
+---
+- name: install httpd
+  hosts: webserver
+  become: true
+  tasks:
+    - name: httpd installed
+      yum:
+        name: httpd
+        state: latest
+    - name: custom index.html
+      template:
+        src: files/index.html
+        dest: /var/www/html/index.html
+      notify:
+       - restart httpd
+    - name: httpd service enabled
+      service:
+        name: httpd
+        enabled: true
+        state: started
+
+  handlers:
+    - name: restart httpd
+      service:
+        name: httpd
+        state: restarted
