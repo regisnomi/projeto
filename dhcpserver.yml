@@ -1,5 +1,5 @@
 ---
-- name: Config DHCP Server
+- name: config dhcp
   hosts: dhcp
   become: yes
   vars:
@@ -8,59 +8,65 @@
     dhcp_netmask: 255.255.255.0
     dhcp_range_start: 10.0.0.100
     dhcp_range_end: 10.0.0.200
-    dhcp_dns_servers:
-      - 8.8.8.8 
-      - 8.8.4.4
-    dhcp_hosts_file: dados-dhcp.csv
+    dhcp_hosts_file: /root/projeto/hosts.csv
 
   tasks:
-    - name: Install DHCP
+    - name: install dhcp
       yum:
         name:
           - dhcp
         state: present
 
-    - name: Read csv file
-      csvfile:
-        path: "{{ dhcp_hosts_file }}"
-        delimiter: ","
-        firstline: yes
-      register: hosts_csv
+    - name: read csv
+      shell: cat "{{ dhcp_hosts_file }}"
+      register: csv_content
 
-    - name: Configurar arquivo dhcpd.conf
+    - name: decode csv
+      set_fact:
+        decoded_csv: "{{ csv_content.stdout_lines }}"
+
+    - name: config dhcpd.conf
       blockinfile:
         dest: /etc/dhcp/dhcpd.conf
         block: |
           subnet {{ dhcp_subnet }} netmask {{ dhcp_netmask }} {
             range {{ dhcp_range_start }} {{ dhcp_range_end }};
-            option domain-name-servers {{ dhcp_dns_servers | join(', ') }};
             option routers {{ ansible_default_ipv4.gateway }};
 
-            {% for host in hosts_csv.lines %}
-            host {{ host.0 }} {
-              hardware ethernet {{ host.2 }};
-              fixed-address {{ host.1 }};
+            {% for host in decoded_csv %}
+            {% set host_fields = host.split(',') %}
+            {% set hostname = host_fields[0] | regex_replace('[^a-zA-Z0-9]', '') %}
+            host {{ hostname }} {
+              hardware ethernet {{ host_fields[2] }};
+              fixed-address {{ host_fields[1] }};
             }
             {% endfor %}
           }
       notify:
-        - restart dhcp
+        - restart-dhcpd
 
-    - name: Config interface DHCP
+    - name: config interface dhcp
       lineinfile:
         dest: /etc/sysconfig/network-scripts/ifcfg-{{ dhcp_interface }}
         line: "BOOTPROTO=dhcp"
         state: present
         create: yes
 
-    - name: start DHCP
+    - name: start dhcp
       service:
         name: dhcpd
         state: started
         enabled: yes
+      register: dhcpd_status
+      failed_when: dhcpd_status.failed
+
+    - name: restart dhcpd
+      service:
+        name: dhcpd
+      when: dhcpd_status.changed
 
   handlers:
-    - name: restart dhcp
+    - name: restart-dhcpd
       service:
         name: dhcpd
         state: restarted
